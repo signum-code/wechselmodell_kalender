@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Wechselkalender</title>
+  <meta name="description" content="Gemeinsamer Betreuungskalender für Eltern im Wechselmodell – ohne Server, Daten bleiben auf dem Handy.">
+  <meta name="theme-color" content="#1a7f8e">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-title">
+      <span class="logo" aria-hidden="true"></span>
+      <h1>Wechselkalender</h1>
+    </div>
+    <div class="topbar-actions">
+      <button id="btnMenu" class="iconbtn" title="Menü">⋮</button>
+    </div>
+  </header>
+
+  <nav class="monthnav">
+    <button id="btnPrev" class="iconbtn big" aria-label="Voriger Monat">‹</button>
+    <button id="monthLabel" class="monthlabel" title="Zum aktuellen Monat springen"></button>
+    <button id="btnNext" class="iconbtn big" aria-label="Nächster Monat">›</button>
+  </nav>
+
+  <main>
+    <div class="weekdays" id="weekdays"></div>
+    <div class="grid" id="grid"></div>
+
+    <div class="legend" id="legend"></div>
+
+    <section class="requests" id="requests"></section>
+  </main>
+
+  <div class="selectbar hidden" id="selectbar">
+    <div class="selectbar-info" id="selectInfo">0 Tage</div>
+    <div class="selectbar-note hidden" id="selectDayInfo"></div>
+    <div class="selectbar-note hidden" id="selectNote"></div>
+    <div class="selectbar-note hidden" id="selectSchool"></div>
+    <div class="selectbar-actions" id="selectActions"></div>
+  </div>
+
+  <div class="selectbar preview hidden" id="previewbar"></div>
+
+  <button class="fab fab-undo fab-redo hidden" id="btnRedo" title="Zurückgenommene Aktion wiederherstellen">
+    <span class="fab-icon">↪</span>
+    <span class="fab-label">Wiederherstellen</span>
+  </button>
+
+  <button class="fab fab-undo hidden" id="btnUndo" title="Letzte Aktion rückgängig">
+    <span class="fab-icon">↩</span>
+    <span class="fab-label">Rückgängig</span>
+  </button>
+
+  <button class="fab" id="btnShare">
+    <span class="fab-icon">➦</span>
+    <span class="fab-label">Teilen</span>
+    <span class="badge hidden" id="shareBadge">0</span>
+  </button>
+
+  <div class="overlay hidden" id="overlay"></div>
+  <div class="sheet hidden" id="sheet"></div>
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

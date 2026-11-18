@@ -1,0 +1,16 @@
+{
+  "name": "Wechselkalender",
+  "short_name": "Wechselkal.",
+  "description": "Gemeinsamer Betreuungskalender für Eltern im Wechselmodell – ohne Server, Daten bleiben auf dem Handy.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#1a7f8e",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
