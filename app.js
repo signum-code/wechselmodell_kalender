@@ -1857,7 +1857,9 @@ function applyImport() {
   const { fresh, payload } = pendingImport;
   const firstRun = !state.profile.me;
   for (const ev of fresh) { state.events[ev.id] = ev; sharedIds.add(ev.id); }
-  if (payload.parents) state.parents = payload.parents; // gemeinsame Namen/Farben übernehmen
+  // Namen, Farben & Co. gelten pro Gerät: nur bei der Ersteinrichtung über
+  // einen Partner-Link werden sie einmalig als Startwerte übernommen.
+  if (firstRun && payload.parents) state.parents = payload.parents;
   ensureParentDefaults(state.parents);
   if (firstRun) state.profile.me = other(payload.from); // Erststart über Partner-Link
   saveState(); saveShared();

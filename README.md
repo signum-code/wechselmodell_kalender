@@ -6,7 +6,7 @@ Die Daten liegen ausschließlich lokal auf den Handys; Änderungen werden als Li
 
 ## Funktionen
 
-- Monatsansicht, Tage farblich markiert: Elternteil 1 / Elternteil 2 / Beide / Nicht da (Dritte: Oma, Klassenfahrt …) / frei – Namen und Farben aller vier Markierungen frei wählbar (voller Farbwähler)
+- Monatsansicht, Tage farblich markiert: Elternteil 1 / Elternteil 2 / Beide / Nicht da (Dritte: Oma, Klassenfahrt …) / frei – Namen und Farben aller vier Markierungen frei wählbar (voller Farbwähler); Namen, Farben und alle anderen Einstellungen gelten **pro Gerät** und wandern nicht über Links mit – nur bei der Ersteinrichtung über einen Partner-Link werden sie einmalig als Startwerte übernommen
 - Übergabe-Streifen entstehen **automatisch** an jedem Wechsel zwischen zwei Tagen (Mama/Papa/Beide/Nicht da; nur „frei" zählt nicht). Die Kachel trägt immer die Farbe der Seite, der der Tag gehört; der schmale Streifen sitzt dort, wo die Übergabe stattfindet: „früh" = oben auf dem ersten Tag der neuen Seite (Farbe der abgebenden Seite), „abends" = unten auf dem letzten Tag der alten Seite (Farbe der übernehmenden Seite). Die Standard-Zeit steht in den Einstellungen; zum Umstellen tippt man genau an die Stelle, wo die Übergabe hin soll (oben = früh, unten = abends)
 - Monatswechsel per Pfeiltasten oder Wischgeste; Tippen auf den Monatsnamen springt zu „heute"
 - Tage antippen (einen oder mehrere) → in der Leiste unten wählen, zu wem sie gehören
