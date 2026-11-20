@@ -6,12 +6,13 @@ Die Daten liegen ausschließlich lokal auf den Handys; Änderungen werden als Li
 
 ## Funktionen
 
-- Monatsansicht, Tage farblich markiert: Elternteil 1 / Elternteil 2 / Beide / Nicht da (Dritte: Oma, Klassenfahrt …) / frei – Namen und Farben aller vier Markierungen frei wählbar (voller Farbwähler); Namen, Farben und alle anderen Einstellungen gelten **pro Gerät** und wandern nicht über Links mit – nur bei der Ersteinrichtung über einen Partner-Link werden sie einmalig als Startwerte übernommen
+- Monatsansicht, Tage farblich markiert: Elternteil 1 / Elternteil 2 / Beide / Nicht da (Dritte: Oma, Klassenfahrt …) / frei – Namen und Farben aller vier Markierungen frei wählbar (voller Farbwähler, die Tageszahl wechselt auf hellen Farben automatisch zu dunkler Schrift); Namen, Farben und alle anderen Einstellungen gelten **pro Gerät** und wandern nicht über Links mit – nur bei der Ersteinrichtung über einen Partner-Link werden sie einmalig als Startwerte übernommen
 - Übergabe-Streifen entstehen **automatisch** an jedem Wechsel zwischen zwei Tagen (Mama/Papa/Beide/Nicht da; nur „frei" zählt nicht). Die Kachel trägt immer die Farbe der Seite, der der Tag gehört; der schmale Streifen sitzt dort, wo die Übergabe stattfindet: „früh" = oben auf dem ersten Tag der neuen Seite (Farbe der abgebenden Seite), „abends" = unten auf dem letzten Tag der alten Seite (Farbe der übernehmenden Seite). Die Standard-Zeit steht in den Einstellungen; zum Umstellen tippt man genau an die Stelle, wo die Übergabe hin soll (oben = früh, unten = abends)
 - Monatswechsel per Pfeiltasten oder Wischgeste; Tippen auf den Monatsnamen springt zu „heute"
 - Tage antippen (einen oder mehrere) → in der Leiste unten wählen, zu wem sie gehören
 - Notiz pro Tag und Person (💬 bei einem ausgewählten Tag, max. 120 Zeichen): Tage mit Notiz tragen eine kleine weiße Ecke, Antippen zeigt die Texte mit Autor in der Leiste, am PC erscheinen sie als Tooltip – Notizen wandern beim Teilen mit
 - Aufgaben-Marker (abschaltbar in den Einstellungen): Tage auswählen → 🎒 → wer bringt und holt (Rucksack-Badges links oben/unten) plus eine Sonderaufgabe (Stern-Badge rechts) mit optionalem Kommentar (z. B. „Papa – Mama beim Sport") – alle in der Farbe der Person, beim Antippen und am PC-Tooltip als Text
+- Schulschluss-Wochenplan (Menü 🕐): übliches Unterrichtsende je Wochentag (z. B. Mo 15:30, Mi 12:20) erscheint als kleine Zeit unten auf den Schultag-Kacheln – am Wochenende, an Feiertagen und in Ferien automatisch ausgeblendet; Ausnahmen für einzelne Tage über den 🎒-Dialog, synct per Link
 - Kind-Modus: dritte Rolle fürs Kind – sieht den ganzen Kalender und bekommt Stände wie die Eltern per Link („Push" über WhatsApp), darf aber als einziges Write eigene Notizen schreiben und zurückschicken; Einstellungen und Rollenwechsel sind PIN-geschützt (Alltagssperre, keine echte Sicherheit), und beim Zusammenführen zählen Kalender-Änderungen grundsätzlich nur, wenn sie von einem Elternteil stammen
 - Änderungsvorschläge mit Ziel **pro Tag** – auch gemischt in einem Vorschlag („WE 21./22. zu mir, dafür 28./29. zu dir") – mit Annehmen / Ablehnen / Zurückziehen / **Gegenvorschlag** (lehnt das Original ab und schickt die angepasste Variante zurück)
 - Unter dem Kalender: offene Vorschläge plus die letzten 3 entschiedenen; der komplette **Verlauf** liegt im Menü (⋮) und wird nach 90 Tagen automatisch zusammengefasst
@@ -50,7 +51,8 @@ Jede Änderung ist ein Ereignis mit eindeutiger ID, Autor (`A`/`B`) und Zeitstem
 - `ho` – abweichende Übergabe-Zeit für einen Wechseltag (`m` früh / `e` abends);
   der Wechseltag selbst wird aus den Zuweisungen abgeleitet (Vortag ≠ Tag)
 - `note` – kurze Notiz zu einem Tag, eine je Autor (`A`/`B`/`K` = Kind; leerer Text = gelöscht)
-- `school` – Aufgaben-Marker: wer bringt/holt (`bring`/`pick`) plus eine Sonderaufgabe (`xwho`/`xnote`; alles leer = entfernt)
+- `school` – Aufgaben-Marker: wer bringt/holt (`bring`/`pick`) plus eine Sonderaufgabe (`xwho`/`xnote`) und optional ein abweichender Schulschluss (`end`; alles leer = entfernt)
+- `sched` – Schulschluss-Wochenplan (`times: { mo: "15:30", … }`); der jüngste Stand gewinnt
 - `range` / `rangedel` – Zeitraum mit Label (z. B. Ferien) bzw. dessen Löschung
 - `req` – Änderungsvorschlag: Ziel-Zuordnung pro Tag (`changes: { "2026-11-21": "A", … }`)
 - `res` – Antwort auf einen Vorschlag (angenommen / abgelehnt / zurückgezogen)

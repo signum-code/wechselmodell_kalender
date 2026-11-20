@@ -155,6 +155,8 @@ body {
   user-select: none;
 }
 .day.assigned { border-color: transparent; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+/* Helle Markierungsfarben bekommen dunkle Tageszahlen (Kontrast). */
+.day.assigned.ink-dark { color: #1c2430; text-shadow: none; }
 .day.out { opacity: var(--cell-out-opacity); }
 .day.today::after {
   content: "";
@@ -171,13 +173,13 @@ body {
   pointer-events: none;
 }
 /* Schul-Marker: runde Badges mit Rucksack-Symbol in der Farbe der Person –
-   oben = bringt (morgens), unten = holt (nachmittags); leicht eingerückt,
-   damit sie unter/über den Übergabe-Streifen sitzen. */
+   oben = bringt (morgens), unten = holt (nachmittags); in den Ecken, direkt
+   unter/über den Übergabe-Streifen (12.5% hoch), damit die Tageszahl frei bleibt. */
 .day .sdot {
   position: absolute;
-  left: 3px;
-  width: 15px;
-  height: 15px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -185,9 +187,9 @@ body {
   box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.92), 0 1px 3px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
-.day .sdot svg { width: 10px; height: 10px; display: block; }
-.day .sdot.bring { top: 20%; }   /* unter der Notiz-Ecke und dem Streifen */
-.day .sdot.pick { bottom: 20%; }
+.day .sdot svg { width: 9px; height: 9px; display: block; }
+.day .sdot.bring { top: calc(12.5% + 2px); }
+.day .sdot.pick { bottom: calc(12.5% + 2px); }
 .day .sdot.extra {  /* Sonderaufgabe: Stern rechts in der Mitte */
   left: auto;
   right: 3px;
@@ -212,8 +214,21 @@ body {
 .stats-table th { color: var(--text-dim); font-weight: 600; }
 .stats-table .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: baseline; }
 
-/* Datums- und Auswahlfelder in Sheets */
-.sheet input[type="date"], .sheet select {
+/* Schulschluss-Zeit, dezent am unteren Kachelrand. */
+.day .stime {
+  position: absolute;
+  left: 0; right: 0; bottom: 1px;
+  text-align: center;
+  font-size: 0.52rem;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.day:not(.assigned) .stime { color: var(--text-dim); }
+
+/* Datums-, Zeit- und Auswahlfelder in Sheets */
+.sheet input[type="date"], .sheet input[type="time"], .sheet select {
   width: 100%;
   padding: 11px 12px;
   border-radius: 10px;

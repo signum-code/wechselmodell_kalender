@@ -381,6 +381,17 @@ function compactEvents() {
     }
   }
 
+  // 1f. Überholte Schulschluss-Wochenpläne löschen (nur der jüngste zählt).
+  const schedWinner = currentSched();
+  for (const ev of evs) {
+    if (ev.t !== 'sched') continue;
+    if (!schedWinner || ev.id !== schedWinner.id) {
+      delete state.events[ev.id];
+      sharedIds.delete(ev.id);
+      removed++;
+    }
+  }
+
   // 2. Alte entschiedene Vorschläge zusammenfassen.
   const now = Date.now();
   for (const req of evs) {
@@ -526,6 +537,7 @@ function computeSchool(eventsObj) {
         // Übergangsweise auch alte Formate (am/pm) lesen.
         xwho: ev.xwho || ev.am || ev.pm || null,
         xnote: ev.xnote || ev.amNote || ev.pmNote || '',
+        end: ev.end || '',                 // Schulschluss-Ausnahme für diesen Tag
         ts: ev.ts, id: ev.id,
       });
     }
@@ -533,7 +545,7 @@ function computeSchool(eventsObj) {
   return map;
 }
 
-const schoolEmpty = (s) => !s || (!s.bring && !s.pick && !s.xwho);
+const schoolEmpty = (s) => !s || (!s.bring && !s.pick && !s.xwho && !s.end);
 
 function currentSchool() {
   return pendingImport ? pendingImport.afterSchool : computeSchool(state.events);
@@ -541,6 +553,34 @@ function currentSchool() {
 
 /* Schul-Marker lassen sich in den Einstellungen ausblenden. */
 const schoolOn = () => state.school !== false;
+
+/* ---------- Schulschluss (Wochenplan) ----------
+   Ein 'sched'-Ereignis trägt die üblichen Unterrichtsenden je Wochentag
+   (times: { mo:'15:30', di:'14:00', … }); der jüngste Stand gewinnt. */
+
+function currentSched() {
+  let best = null;
+  for (const ev of Object.values(state.events)) {
+    if (ev.t !== 'sched' || !isParentAuthor(ev.by)) continue;
+    if (!best || ev.ts > best.ts || (ev.ts === best.ts && ev.id > best.id)) best = ev;
+  }
+  return best;
+}
+
+const SCHED_KEYS = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa'];
+
+/* Schulschluss eines Tages: Tages-Ausnahme (🎒) geht vor; sonst Wochenplan,
+   aber nie am Wochenende, an Feiertagen oder in Zeiträumen (Ferien). */
+function schoolEndFor(dayStr, school, holiday, range) {
+  if (!schoolOn()) return null;
+  const sc = school.get(dayStr);
+  if (sc && sc.end) return sc.end;
+  if (holiday || range) return null;
+  const dow = parseDay(dayStr).getDay();
+  if (dow === 0 || dow === 6) return null;
+  const sched = currentSched();
+  return (sched && sched.times && sched.times[SCHED_KEYS[dow]]) || null;
+}
 
 /* Zeiträume ('range'-Ereignisse, z. B. Ferien): alle nicht gelöschten. */
 function computeRanges(eventsObj) {
@@ -715,6 +755,14 @@ function bgBase(val) {
   return valColor(val);
 }
 
+/* Wahrgenommene Helligkeit (YIQ-Formel): helle Flächen → dunkle Schrift. */
+function isLightColor(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 > 150;
+}
+
 function renderCalendar() {
   const wd = $('weekdays');
   if (!wd.childElementCount) {
@@ -757,12 +805,14 @@ function renderCalendar() {
     if (a && a.val) {
       cell.classList.add('assigned');
       cell.style.background = dayBackground(dayStr, a.val, assigns, hoMap);
+      if (isLightColor(valColor(a.val))) cell.classList.add('ink-dark');
     } else {
       // Vergangenheit, die nur noch das Archiv kennt: statisch anzeigen.
       fz = frozenFor(dayStr, assigns);
       if (fz) {
         cell.classList.add('assigned', 'frozen');
         cell.style.background = fz.farbe || '#888';
+        if (isLightColor(fz.farbe)) cell.classList.add('ink-dark');
         const tp = [`📦 ${fz.wer || '?'} (Archiv – nur lesen)`];
         if (fz.aufgaben) tp.push(`🎒 ${fz.aufgaben}`);
         for (const n of fz.notizen || []) tp.push(`💬 ${n}`);
@@ -799,7 +849,7 @@ function renderCalendar() {
         const n = kind === 'extra' ? sc.xnote : '';
         tp.push(`${label}: ${valName(who)}${n ? ' – ' + n : ''}`);
       }
-      cell.title = (cell.title ? cell.title + '\n' : '') + tp.join(' · ');
+      if (tp.length) cell.title = (cell.title ? cell.title + '\n' : '') + tp.join(' · ');
     }
     // Feiertag (rote Unterstreichung) und Ferien (gepunktete Unterstreichung).
     const holiday = holidayFor(dayStr);
@@ -811,6 +861,15 @@ function renderCalendar() {
     if (range) {
       cell.classList.add('ferien');
       cell.title = `🏖 ${range.label}` + (cell.title ? '\n' + cell.title : '');
+    }
+    // Schulschluss-Zeit, dezent am unteren Kachelrand.
+    const endT = schoolEndFor(dayStr, school, holiday, range);
+    if (endT) {
+      const t = document.createElement('span');
+      t.className = 'stime';
+      t.textContent = endT;
+      cell.appendChild(t);
+      cell.title = (cell.title ? cell.title + '\n' : '') + `🕐 Schulschluss ${endT}`;
     }
     if (pendingImport && pendingImport.diffDays.has(dayStr)) {
       // Randfarbe = bisherige Zuordnung, Füllung = künftige.
@@ -1036,6 +1095,8 @@ function renderSelectBar() {
     if (h) infoParts.push(`📅 ${esc(h)}`);
     const rg = rangeFor(currentRanges(), singleDay);
     if (rg) infoParts.push(`🏖 ${esc(rg.label)}`);
+    const endT = schoolEndFor(singleDay, schoolOn() ? currentSchool() : new Map(), h, rg);
+    if (endT) infoParts.push(`🕐 Schulschluss ${esc(endT)}`);
   }
   infoEl.innerHTML = infoParts.join(' &nbsp;·&nbsp; ');
   infoEl.classList.toggle('hidden', !infoParts.length);
@@ -1064,7 +1125,12 @@ function renderSelectBar() {
   const mk = (label, bg, fn, cls = '') => {
     const b = document.createElement('button');
     b.className = 'btn ' + cls;
-    if (bg) { b.style.background = bg; b.style.color = '#fff'; b.style.textShadow = '0 1px 2px rgba(0,0,0,0.25)'; }
+    if (bg) {
+      b.style.background = bg;
+      const dark = isLightColor(bg);
+      b.style.color = dark ? '#1c2430' : '#fff';
+      b.style.textShadow = dark ? 'none' : '0 1px 2px rgba(0,0,0,0.25)';
+    }
     b.textContent = label;
     b.addEventListener('click', fn);
     acts.appendChild(b);
@@ -1367,6 +1433,8 @@ function openSchoolSheet(days) {
     <div class="reqrow-pills" style="justify-content:flex-start">${row('xwho')}</div>
     <input type="text" id="xNote" maxlength="40" placeholder="Kommentar (optional), z. B. Mama beim Sport"
       value="${esc((cur && cur.xnote) || '')}" style="margin-top:8px">
+    <label>🕐 Schulschluss abweichend vom Wochenplan (optional)</label>
+    <input type="time" id="endTime" value="${esc((cur && cur.end) || '')}">
     <div class="row" style="margin-top:16px">
       <button class="btn primary block" id="schoolSave">Speichern</button>
     </div>
@@ -1386,18 +1454,21 @@ function openSchoolSheet(days) {
     const map = computeSchool(state.events);
     pushUndo('Aufgaben-Marker');
     const xnote = sheet.querySelector('#xNote').value.trim();
-    const anySet = sel.bring || sel.pick || sel.xwho;
+    const endTime = sheet.querySelector('#endTime').value;
+    const anySet = sel.bring || sel.pick || sel.xwho || endTime;
     let changed = 0;
     for (const day of days) {
       const c = map.get(day);
       const same = ((c && c.bring) || null) === sel.bring
         && ((c && c.pick) || null) === sel.pick
         && ((c && c.xwho) || null) === sel.xwho
+        && ((c && c.end) || '') === endTime
         && (!sel.xwho || ((c && c.xnote) || '') === xnote);
       if (same) continue;                      // unverändert
       if (!c && !anySet) continue;             // nichts da, nichts zu löschen
       const ev = { t: 'school', day, bring: sel.bring, pick: sel.pick, xwho: sel.xwho };
       if (sel.xwho && xnote) ev.xnote = xnote;
+      if (endTime) ev.end = endTime;
       addEvent(ev);
       changed++;
     }
@@ -1410,6 +1481,40 @@ function openSchoolSheet(days) {
       popUndo();
       toast('Keine Änderung');
     }
+  };
+}
+
+/* --- Schulschluss-Wochenplan: übliche Unterrichtsenden je Wochentag,
+   als kleine Zeit auf den Schultag-Kacheln sichtbar. --- */
+
+function openSchedSheet() {
+  const cur = (currentSched() || {}).times || {};
+  const wdays = [['mo', 'Montag'], ['di', 'Dienstag'], ['mi', 'Mittwoch'], ['do', 'Donnerstag'], ['fr', 'Freitag']];
+  const sheet = openSheet(`
+    <h2>🕐 Schulschluss</h2>
+    <p class="sub">Wann ist normalerweise Unterrichtsende? Gilt als Wochenmuster und
+    erscheint klein auf den Schultagen – am Wochenende, an Feiertagen und in
+    eingetragenen Ferien automatisch nicht. Leer = keine Anzeige. Ausnahmen für
+    einzelne Tage: Tag auswählen → 🎒. Der Plan wandert beim Teilen mit.</p>
+    ${wdays.map(([k, label]) => `
+      <label>${label}</label>
+      <input type="time" id="sched_${k}" value="${esc(cur[k] || '')}">`).join('')}
+    <div class="row" style="margin-top:16px">
+      <button class="btn primary block" id="schedSave">Speichern</button>
+    </div>
+  `);
+  sheet.querySelector('#schedSave').onclick = () => {
+    const times = {};
+    for (const [k] of wdays) {
+      const v = sheet.querySelector('#sched_' + k).value;
+      if (v) times[k] = v;
+    }
+    if (JSON.stringify(times) === JSON.stringify(cur)) { closeSheet(); toast('Keine Änderung'); return; }
+    pushUndo('Schulschluss');
+    addEvent({ t: 'sched', times });
+    closeSheet();
+    renderAll();
+    toast('Schulschluss gespeichert – gilt für alle Schultage');
   };
 }
 
@@ -1558,6 +1663,7 @@ function shareAll() {
   const cutoff = monthStart();
   const evts = Object.values(state.events).filter((ev) => {
     if (ev.t === 'assign') return ev.day >= cutoff;
+    if (ev.t === 'sched') return true; // Schulschluss-Wochenplan ist zeitlos
     if (ev.t === 'req') return Object.keys(reqChanges(ev)).some((d) => d >= cutoff);
     if (ev.t === 'res') {
       const req = state.events[ev.req];
@@ -1627,6 +1733,11 @@ function openShareReview(evts, kindLabel) {
   }
   for (const ev of evts) {
     if (ev.t === 'range') lines.push(`🏖 <b>${esc(ev.label)}</b> ${fmtShort(ev.from)} – ${fmtShort(ev.to)}`);
+    else if (ev.t === 'sched') {
+      const t = ev.times || {};
+      const txt = SCHED_KEYS.filter((k) => t[k]).map((k) => `${k[0].toUpperCase()}${k[1]} ${t[k]}`).join(', ');
+      lines.push(`🕐 Schulschluss: ${esc(txt) || 'keiner'}`);
+    }
     else if (ev.t === 'rangedel') {
       const r = state.events[ev.ref];
       lines.push(`🏖 Zeitraum ${r ? `„${esc(r.label)}“ ` : ''}<b>gelöscht</b>`);
@@ -1817,6 +1928,7 @@ async function checkIncoming() {
       const n = ev.xnote || ev.amNote || ev.pmNote || '';
       parts.push(`extra <b>${esc(valNameIn(payload, xw))}</b>${n ? ` („${esc(n)}“)` : ''}`);
     }
+    if (ev.end) parts.push(`Schulschluss <b>${esc(ev.end)}</b>`);
     diffs.push(`${fmtShort(ev.day)}: 🎒 ${parts.join(', ') || 'Marker <b>entfernt</b>'}`);
   }
   // Neue oder gelöschte Ferien-Zeiträume.
@@ -1827,6 +1939,8 @@ async function checkIncoming() {
       diffs.push(`🏖 Zeitraum ${r ? `„${esc(r.label)}“ ` : ''}<b>gelöscht</b>`);
     }
   }
+  // Geänderter Schulschluss-Wochenplan.
+  if (fresh.some((e) => e.t === 'sched')) diffs.push('🕐 Schulschluss-Wochenplan aktualisiert');
 
   const reqLines = fresh.filter((e) => e.t === 'req').map((ev) => {
     const ch = Object.entries(reqChanges(ev)).map(([d, v]) => `${fmtShort(d)} → <b>${esc(valNameIn(payload, v))}</b>`);
@@ -2149,6 +2263,7 @@ function openMenu() {
       <div class="menu-sep">Planung &amp; Statistik</div>
       ${kid ? '' : `<button class="menu-item" id="mPattern"><span class="mi">🧩</span> Muster anwenden…</button>`}
       <button class="menu-item" id="mFerien"><span class="mi">🏖</span> Ferien &amp; Feiertage</button>
+      ${kid || !schoolOn() ? '' : `<button class="menu-item" id="mSched"><span class="mi">🕐</span> Schulschluss (Wochenplan)</button>`}
       <button class="menu-item" id="mStats"><span class="mi">📊</span> Bilanz</button>
       <button class="menu-item" id="mHistory"><span class="mi">🕘</span> Verlauf</button>
       ${kid ? '' : `<button class="menu-item" id="mLock"><span class="mi">${editPast ? '🔒' : '🔓'}</span> ${editPast ? 'Vergangene Monate wieder sperren' : 'Vergangene Monate bearbeiten'}</button>`}
@@ -2164,6 +2279,7 @@ function openMenu() {
   on('#mPattern', () => openPatternSheet());
   on('#mStats', () => openStats());
   on('#mFerien', () => openFerienSheet());
+  on('#mSched', () => openSchedSheet());
   on('#mPrint', () => { closeSheet(); setTimeout(() => window.print(), 100); });
   on('#mIcs', () => { closeSheet(); exportIcs(); });
   on('#mHistory', () => openHistory());
@@ -2221,6 +2337,7 @@ function openHelp() {
       <li><b>Übergabe-Streifen</b> erscheinen automatisch an jedem Wechsel – auch bei „Beide“ und „Nicht da“ (Standard früh/abends einstellbar). Der Streifen sitzt dort, wo die Übergabe stattfindet: <b>früh</b> = oben auf dem ersten Tag der neuen Seite, <b>abends</b> = unten auf dem letzten Tag der alten Seite. Zum Umstellen genau an diese Stelle tippen.</li>
       <li><b>Notiz</b> → einen Tag auswählen und 💬 tippen: kurzer Kommentar zum Tag (z. B. „Oma holt ab“). Jeder schreibt seine eigene Notiz; Tage mit Notiz haben eine weiße Ecke, Antippen zeigt die Texte unten in der Leiste.</li>
       <li><b>Aufgaben-Marker</b> → Tage auswählen und 🎒 tippen: Wer bringt/holt (Rucksack-Badges links oben/unten) plus eine <b>Sonderaufgabe</b> (Stern-Badge rechts) mit optionalem Kommentar, z. B. „Papa – Mama beim Sport“. Alles in der Farbe der Person; in den Einstellungen aus-/einschaltbar.</li>
+      <li><b>Schulschluss</b> (Menü 🕐): übliches Unterrichtsende je Wochentag einmal eintragen – es erscheint als kleine Zeit unten auf den Schultag-Kacheln, am Wochenende, an Feiertagen und in Ferien automatisch nicht. Abweichungen für einzelne Tage (Ausflug, Hitzefrei): Tag auswählen → 🎒 → „Schulschluss abweichend“. Wandert beim Teilen mit.</li>
       <li><b>Kind-Modus</b> → in den Einstellungen bei „Wer bist du?“ <b>Kind</b> wählen und eine PIN vergeben. Das Kind sieht den ganzen Kalender und bekommt Stände wie gewohnt per Link – schreiben kann es nur eigene Notizen. Einstellungen sind dann PIN-geschützt; den Kalender ändern können nur die Eltern.</li>
       <li><b>Vorschlag</b> → gewünschte Änderung pro Tag wählbar (auch gemischt, z. B. ein Wochenende hin, eins zurück); der andere sieht vorab, was sich ändert, und kann annehmen, ablehnen oder einen Gegenvorschlag schicken.</li>
       <li><b>Teilen-Knopf</b> → zeigt erst, was rausgeht (Nachricht dazu optional), dann als Link verschicken (z. B. per WhatsApp). Der andere tippt den Link an – fertig.</li>
