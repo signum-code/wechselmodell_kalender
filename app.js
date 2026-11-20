@@ -2096,10 +2096,13 @@ async function decodePayload(str) {
 
 /* ---------- Einstellungen / Onboarding ---------- */
 
-function openSettings(onboarding = false) {
+function openSettings(onboarding = false, unlocked = false) {
   const p = state.parents;
   let me = state.profile.me || 'A';
   let ho = state.handover || 'm';
+  // Kind-Modus ohne PIN: Design, Namen & Farben frei (gelten eh pro Gerät);
+  // Rollenwechsel, Übergabe, PIN und Reset nur über die Eltern-Einstellungen.
+  const limited = !onboarding && isKid() && !unlocked;
 
   // Name + Farbwähler in einer Zeile; Farbe über den System-Farbdialog.
   const nameColor = (key, name, color, fallback) => `
@@ -2121,11 +2124,11 @@ function openSettings(onboarding = false) {
     ${nameColor('X', (p.X && p.X.name) || 'Nicht da', (p.X && p.X.color) || COLOR_X, 'Nicht da')}
     <label>Kind – Name (für Notizen)</label>
     <input type="text" id="nameK" value="${esc((p.K && p.K.name) || 'Kind')}" maxlength="20" placeholder="Kind">
-    <label>Standard-Übergabe</label>
+    ${limited ? '' : `<label>Standard-Übergabe</label>
     <div class="radio-row" id="hoRow">
       <div class="radio-pill" data-ho="m">Früh</div>
       <div class="radio-pill" data-ho="e">Abends</div>
-    </div>
+    </div>`}
     <label>🎒 Aufgaben-Marker (bringt/holt, Sonderaufgabe)</label>
     <div class="radio-row" id="schoolRow">
       <div class="radio-pill" data-school="1">An</div>
@@ -2138,18 +2141,20 @@ function openSettings(onboarding = false) {
       <div class="radio-pill" data-th="medium">Mittel</div>
       <div class="radio-pill" data-th="dark">Dunkel</div>
     </div>
-    <label>Wer bist du (auf diesem Handy)?</label>
+    ${limited ? '' : `<label>Wer bist du (auf diesem Handy)?</label>
     <div class="radio-row" id="meRow">
       <div class="radio-pill" data-me="A">${esc(p.A.name)}</div>
       <div class="radio-pill" data-me="B">${esc(p.B.name)}</div>
       <div class="radio-pill" data-me="K">${esc((p.K && p.K.name) || 'Kind')}</div>
     </div>
     <label>PIN für den Kind-Modus${state.pin ? ' (gesetzt – leer lassen zum Behalten)' : ''}</label>
-    <input type="password" id="pinField" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="${state.pin ? 'unverändert' : 'z. B. 4 Ziffern'}">
+    <input type="password" id="pinField" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="${state.pin ? 'unverändert' : 'z. B. 4 Ziffern'}">`}
     <div class="row" style="margin-top:16px">
       <button class="btn primary block" id="btnSave">Speichern</button>
     </div>
-    ${onboarding ? '' : `<button class="btn danger-ghost block" id="btnReset" style="margin-top:24px">🗑 App zurücksetzen – alle Daten löschen…</button>`}
+    ${limited ? `<p class="sub" style="margin-top:16px">Übergaben, Rollenwechsel, PIN und Zurücksetzen sind gesperrt.</p>
+    <button class="btn ghost block" id="btnParents">🔒 Eltern-Einstellungen (PIN)</button>` : ''}
+    ${onboarding || limited ? '' : `<button class="btn danger-ghost block" id="btnReset" style="margin-top:24px">🗑 App zurücksetzen – alle Daten löschen…</button>`}
   `, { dismissable: !onboarding });
 
   const nameA = sheet.querySelector('#nameA');
@@ -2190,13 +2195,17 @@ function openSettings(onboarding = false) {
   const resetBtn = sheet.querySelector('#btnReset');
   if (resetBtn) resetBtn.onclick = () => openResetConfirm();
 
+  const parentsBtn = sheet.querySelector('#btnParents');
+  if (parentsBtn) parentsBtn.onclick = () => openPinPrompt(() => openSettings(false, true));
+
   sheet.querySelector('#btnSave').onclick = () => {
     const name = (key, fb) => sheet.querySelector('#name' + key).value.trim() || fb;
     const col = (key) => sheet.querySelector('#col' + key).value.toLowerCase();
     const cols = ['A', 'B', 'AB', 'X'].map(col);
     // Alle vier Markierungen müssen im Kalender unterscheidbar bleiben.
     if (new Set(cols).size < 4) { toast('Bitte vier unterschiedliche Farben wählen'); return; }
-    const pinVal = sheet.querySelector('#pinField').value.trim();
+    const pinEl = sheet.querySelector('#pinField');
+    const pinVal = pinEl ? pinEl.value.trim() : '';
     if (me === 'K' && !state.pin && !pinVal) {
       toast('Bitte eine PIN setzen – sie schützt die Einstellungen im Kind-Modus');
       return;
@@ -2258,7 +2267,7 @@ function openMenu() {
   const sheet = openSheet(`
     <div class="menu-list">
       <button class="menu-item" id="mHelp"><span class="mi">❓</span> So funktioniert’s</button>
-      <button class="menu-item" id="mSettings"><span class="mi">⚙️</span> Einstellungen${kid ? ' (PIN)' : ''}</button>
+      <button class="menu-item" id="mSettings"><span class="mi">⚙️</span> Einstellungen</button>
       ${kid ? '' : `<button class="menu-item" id="mFull"><span class="mi">🔄</span> Abgleich teilen (ab diesem Monat)</button>`}
       <div class="menu-sep">Planung &amp; Statistik</div>
       ${kid ? '' : `<button class="menu-item" id="mPattern"><span class="mi">🧩</span> Muster anwenden…</button>`}
@@ -2292,10 +2301,9 @@ function openMenu() {
   on('#mExport', () => { closeSheet(); exportBackup(); });
   on('#mRescue', () => { closeSheet(); exportRescues(); });
   on('#mImport', () => { closeSheet(); importBackup(); });
-  on('#mSettings', () => {
-    if (isKid() && state.pin) openPinPrompt(() => openSettings(false));
-    else openSettings(false);
-  });
+  // Kind-Modus: Einstellungen öffnen direkt in der reduzierten Ansicht
+  // (Design, Namen, Farben); alles Heikle liegt dort hinter der PIN.
+  on('#mSettings', () => openSettings(false));
   on('#mHelp', () => openHelp());
 }
 
@@ -2338,7 +2346,7 @@ function openHelp() {
       <li><b>Notiz</b> → einen Tag auswählen und 💬 tippen: kurzer Kommentar zum Tag (z. B. „Oma holt ab“). Jeder schreibt seine eigene Notiz; Tage mit Notiz haben eine weiße Ecke, Antippen zeigt die Texte unten in der Leiste.</li>
       <li><b>Aufgaben-Marker</b> → Tage auswählen und 🎒 tippen: Wer bringt/holt (Rucksack-Badges links oben/unten) plus eine <b>Sonderaufgabe</b> (Stern-Badge rechts) mit optionalem Kommentar, z. B. „Papa – Mama beim Sport“. Alles in der Farbe der Person; in den Einstellungen aus-/einschaltbar.</li>
       <li><b>Schulschluss</b> (Menü 🕐): übliches Unterrichtsende je Wochentag einmal eintragen – es erscheint als kleine Zeit unten auf den Schultag-Kacheln, am Wochenende, an Feiertagen und in Ferien automatisch nicht. Abweichungen für einzelne Tage (Ausflug, Hitzefrei): Tag auswählen → 🎒 → „Schulschluss abweichend“. Wandert beim Teilen mit.</li>
-      <li><b>Kind-Modus</b> → in den Einstellungen bei „Wer bist du?“ <b>Kind</b> wählen und eine PIN vergeben. Das Kind sieht den ganzen Kalender und bekommt Stände wie gewohnt per Link – schreiben kann es nur eigene Notizen. Einstellungen sind dann PIN-geschützt; den Kalender ändern können nur die Eltern.</li>
+      <li><b>Kind-Modus</b> → in den Einstellungen bei „Wer bist du?“ <b>Kind</b> wählen und eine PIN vergeben. Das Kind sieht den ganzen Kalender und bekommt Stände wie gewohnt per Link – schreiben kann es nur eigene Notizen. Aussehen, Namen und Farben darf es frei einstellen (gelten nur auf seinem Gerät); Übergaben, Rollenwechsel, PIN und Zurücksetzen liegen hinter den PIN-geschützten <b>Eltern-Einstellungen</b>, und den Kalender ändern können nur die Eltern.</li>
       <li><b>Vorschlag</b> → gewünschte Änderung pro Tag wählbar (auch gemischt, z. B. ein Wochenende hin, eins zurück); der andere sieht vorab, was sich ändert, und kann annehmen, ablehnen oder einen Gegenvorschlag schicken.</li>
       <li><b>Teilen-Knopf</b> → zeigt erst, was rausgeht (Nachricht dazu optional), dann als Link verschicken (z. B. per WhatsApp). Der andere tippt den Link an – fertig.</li>
       <li><b>Muster anwenden</b> (Menü) füllt einen Zeitraum mit eurem Rhythmus (wöchentlich, 14-täglich, 2-2-3, 2-2-5-5, 3-4-4-3 oder jedes 2. Wochenende) – einzelne Tage danach einfach umtippen. Der <b>↩-Knopf unten links</b> nimmt die letzte Aktion zurück, <b>↪</b> stellt sie wieder her (ausgegraut, wenn gerade nichts zurückzunehmen bzw. wiederherzustellen ist).</li>
