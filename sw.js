@@ -1,6 +1,6 @@
 /* Service Worker: macht die App offline-fähig (Cache-first für die App-Hülle). */
 
-const CACHE = 'wechselkalender-v53';
+const CACHE = 'wechselkalender-v54';
 const ASSETS = [
   './',
   './index.html',

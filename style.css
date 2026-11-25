@@ -536,6 +536,11 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 50%; }
   overflow-y: auto;
 }
 
+/* ----- Letzte Änderungen (Verlauf der gültigen Einträge) ----- */
+.log-list { max-height: 52vh; }
+.log-list li { margin-bottom: 7px; }
+.log-meta { font-size: 0.76rem; color: var(--text-dim); }
+
 /* ----- Toast ----- */
 .toast {
   position: fixed;

@@ -953,6 +953,43 @@ function openHistory() {
   `);
 }
 
+/* Diagnose-Ansicht: wann die aktuell gültigen Einträge entstanden sind – mit
+   Datum, Uhrzeit und Urheber. Kein vollständiges Protokoll: überholte
+   Einträge räumt die App beim Start auf, es bleibt der jeweils letzte Stand. */
+function openChangeLog() {
+  const rows = [];
+  for (const ev of Object.values(state.events)) {
+    let what = null;
+    if (ev.t === 'assign') what = `${fmtShort(ev.day)} → <b>${esc(valName(ev.val))}</b>`;
+    else if (ev.t === 'ho') what = ev.time === 'm'
+      ? `Übergabe <b>früh</b> am ${fmtShort(ev.day)}`
+      : `Übergabe <b>abends</b> am ${fmtShort(prevDayStr(ev.day))}`;
+    else if (ev.t === 'note') what = ev.text
+      ? `Notiz am ${fmtShort(ev.day)}: „${esc(ev.text)}“`
+      : `Notiz am ${fmtShort(ev.day)} <b>gelöscht</b>`;
+    else if (ev.t === 'school') what = `🎒 Marker am ${fmtShort(ev.day)}${schoolEmpty(ev) ? ' <b>entfernt</b>' : ''}`;
+    else if (ev.t === 'range') what = `🏖 „${esc(ev.label)}“ ${fmtShort(ev.from)} – ${fmtShort(ev.to)}`;
+    else if (ev.t === 'rangedel') {
+      const r = state.events[ev.ref];
+      what = `🏖 Zeitraum ${r ? `„${esc(r.label)}“ ` : ''}<b>gelöscht</b>`;
+    }
+    else if (ev.t === 'sched') what = '🕐 Schulschluss-Wochenplan geändert';
+    if (!what) continue;
+    rows.push({ ts: ev.ts, by: ev.by, what, shared: sharedIds.has(ev.id) });
+  }
+  rows.sort((a, b) => b.ts - a.ts);
+  const fmtTs = (ts) => new Date(ts).toLocaleString('de-DE', {
+    weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+  });
+  const html = rows.slice(0, 40).map((r) =>
+    `<li>${r.what}<br><span class="log-meta">${fmtTs(r.ts)} · ${esc(authorName(r.by))}${r.shared ? '' : ' · <b>noch nicht geteilt</b>'}</span></li>`).join('');
+  openSheet(`
+    <h2>Letzte Änderungen</h2>
+    <p class="sub">Wann die aktuell gültigen Einträge entstanden sind. Überholte Einträge räumt die App automatisch auf – dies ist der jeweils letzte Stand pro Tag, kein vollständiges Protokoll.</p>
+    <ul class="import-list log-list">${html || '<li>Keine Einträge.</li>'}</ul>
+  `);
+}
+
 function reqCard(r, status) {
   const mine = r.by === state.profile.me;
   const who = esc(authorName(r.by));
@@ -1871,16 +1908,30 @@ async function checkIncoming() {
   const fresh = payload.events.filter((e) => e && e.id && !state.events[e.id]);
   const senderName = payload.parents?.[payload.from]?.name || 'Partner';
 
-  if (!fresh.length) {
-    toast('Keine neuen Änderungen im Link');
-    return;
-  }
-
   // Wie würde sich der Kalender durch die Übernahme ändern? (alt → neu pro Tag)
   const before = computeAssignments();
   const merged = { ...state.events };
   fresh.forEach((e) => (merged[e.id] = e));
   const after = computeAssignmentsFrom(merged);
+
+  // Tage, die beim Absender anders stehen als hier NACH der Übernahme: sein
+  // Eintrag verliert, weil ein hiesiger neuer ist. Ein Link kann das nie von
+  // selbst überschreiben – deshalb sichtbar machen und Angleichen anbieten.
+  const payloadEvents = {};
+  for (const e of payload.events) if (e && e.id) payloadEvents[e.id] = e;
+  const senderView = computeAssignmentsFrom(payloadEvents);
+  const conflicts = [];
+  for (const day of [...senderView.keys()].sort()) {
+    const mine = after.get(day);
+    const theirs = senderView.get(day);
+    if (mine && mine.val !== theirs.val) conflicts.push({ day, mine: mine.val, theirs: theirs.val });
+  }
+
+  if (!fresh.length) {
+    if (conflicts.length) openConflictSheet(conflicts, senderName);
+    else toast('Keine neuen Änderungen im Link');
+    return;
+  }
   const afterHo = computeHoOverrides(merged);
   const afterNotes = computeNotes(merged);
   const afterSchool = computeSchool(merged);
@@ -1949,7 +2000,7 @@ async function checkIncoming() {
 
   // Vorschau-Modus starten: Kalender zeigt den empfangenen Stand,
   // geänderte Tage bekommen einen Farbrand; übernommen wird erst auf Klick.
-  pendingImport = { payload, fresh, after, afterHo, afterNotes, afterSchool, afterRanges, diffDays, oldVals, diffs, reqLines, senderName };
+  pendingImport = { payload, fresh, after, afterHo, afterNotes, afterSchool, afterRanges, diffDays, oldVals, diffs, reqLines, senderName, conflicts };
   selectedDays.clear();
 
   // Zum Monat der ersten Änderung springen.
@@ -2001,6 +2052,7 @@ function renderPreviewBar() {
   const parts = [];
   if (p.diffDays.size) parts.push(`${p.diffDays.size} Tag${p.diffDays.size === 1 ? '' : 'e'} markiert (Randfarbe = bisher)`);
   if (p.reqLines.length) parts.push(`${p.reqLines.length} neue${p.reqLines.length === 1 ? 'r' : ''} Vorschlag${p.reqLines.length === 1 ? '' : 'e'}`);
+  if (p.conflicts && p.conflicts.length) parts.push(`⚠️ ${p.conflicts.length} Tag${p.conflicts.length === 1 ? ' bleibt' : 'e bleiben'} bei dir anders (→ Details)`);
   bar.innerHTML = `
     <div class="selectbar-info"><b>Vorschau</b> – Änderungen von <b>${esc(p.senderName)}</b>${p.payload.msg ? `: „${esc(p.payload.msg)}“` : ''}${parts.length ? '<br>' + parts.join(', ') : ''}</div>
     <div class="selectbar-actions">
@@ -2025,6 +2077,13 @@ function openImportDetails() {
     html += `<p class="sub" style="margin:10px 0 2px">Neue Vorschläge zum Beantworten:</p>
       <ul class="import-list">${p.reqLines.map((l) => `<li>${l}</li>`).join('')}</ul>`;
   }
+  const cfl = p.conflicts || [];
+  if (cfl.length) {
+    const lines = cfl.map((c) =>
+      `${fmtShort(c.day)}: bei dir <b>${esc(valName(c.mine))}</b>, bei ${esc(p.senderName)} <b>${esc(valName(c.theirs))}</b>`);
+    html += `<p class="sub" style="margin:10px 0 2px">⚠️ Bleibt bei dir anders – dein Eintrag ist neuer und gewinnt:</p>
+      <ul class="import-list">${lines.map((l) => `<li>${l}</li>`).join('')}</ul>`;
+  }
   if (!html) html = '<p class="sub" style="margin:10px 0 2px">Keine Auswirkung auf deinen Kalender – die Stände sind bereits identisch.</p>';
 
   const sheet = openSheet(`
@@ -2034,6 +2093,9 @@ function openImportDetails() {
     <div class="row" style="margin-top:12px">
       <button class="btn primary block" id="impOk">Übernehmen</button>
     </div>
+    ${cfl.length && !isKid() ? `<div class="row">
+      <button class="btn secondary block" id="impAdopt">Übernehmen + angleichen (${cfl.length})</button>
+    </div>` : ''}
     <div class="row">
       <button class="btn ghost block" id="impNo">Verwerfen</button>
     </div>
@@ -2042,8 +2104,42 @@ function openImportDetails() {
     </div>
   `);
   sheet.querySelector('#impOk').onclick = applyImport;
+  const adoptBtn = sheet.querySelector('#impAdopt');
+  if (adoptBtn) adoptBtn.onclick = () => {
+    applyImport();
+    pushUndo('Angleichen');
+    for (const c of cfl) addEvent({ t: 'assign', day: c.day, val: c.theirs });
+    renderAll();
+    toast(`Übernommen + ${cfl.length} Tag${cfl.length === 1 ? '' : 'e'} angeglichen ✓`);
+  };
   sheet.querySelector('#impNo').onclick = discardImport;
   sheet.querySelector('#impBack').onclick = closeSheet;
+}
+
+/* Link ohne neue Ereignisse, aber mit Abweichungen: Der Stand des Absenders
+   verliert an diesen Tagen gegen neuere hiesige Einträge. Auf Wunsch wird er
+   als frische Zuweisung übernommen – die geht beim nächsten Teilen an alle. */
+function openConflictSheet(conflicts, senderName) {
+  const n = conflicts.length;
+  const lines = conflicts.map((c) =>
+    `${fmtShort(c.day)}: bei dir <b>${esc(valName(c.mine))}</b>, bei ${esc(senderName)} <b>${esc(valName(c.theirs))}</b>`);
+  const sheet = openSheet(`
+    <h2>Keine neuen Einträge</h2>
+    <p class="sub">Alles im Link ist hier schon bekannt – aber ${n === 1 ? 'ein Tag steht' : `${n} Tage stehen`} bei dir anders, weil dein Eintrag neuer ist und gewinnt:</p>
+    <ul class="import-list">${lines.map((l) => `<li>${l}</li>`).join('')}</ul>
+    ${isKid() ? '' : `<p class="sub">Stimmt der Stand von ${esc(senderName)}? Dann hier übernehmen – die Angleichung geht beim nächsten Teilen automatisch mit.</p>
+    <div class="row"><button class="btn primary block" id="cfAdopt">Auf ${esc(senderName)}s Stand angleichen</button></div>`}
+    <div class="row"><button class="btn ghost block" id="cfClose">Schließen</button></div>
+  `);
+  const adopt = sheet.querySelector('#cfAdopt');
+  if (adopt) adopt.onclick = () => {
+    pushUndo('Angleichen');
+    for (const c of conflicts) addEvent({ t: 'assign', day: c.day, val: c.theirs });
+    closeSheet();
+    renderAll();
+    toast(`${n} Tag${n === 1 ? '' : 'e'} angeglichen ✓`);
+  };
+  sheet.querySelector('#cfClose').onclick = closeSheet;
 }
 
 function valNameIn(payload, val) {
@@ -2275,6 +2371,7 @@ function openMenu() {
       ${kid || !schoolOn() ? '' : `<button class="menu-item" id="mSched"><span class="mi">🕐</span> Schulschluss (Wochenplan)</button>`}
       <button class="menu-item" id="mStats"><span class="mi">📊</span> Bilanz</button>
       <button class="menu-item" id="mHistory"><span class="mi">🕘</span> Verlauf</button>
+      <button class="menu-item" id="mLog"><span class="mi">🕓</span> Letzte Änderungen</button>
       ${kid ? '' : `<button class="menu-item" id="mLock"><span class="mi">${editPast ? '🔒' : '🔓'}</span> ${editPast ? 'Vergangene Monate wieder sperren' : 'Vergangene Monate bearbeiten'}</button>`}
       <div class="menu-sep">Export &amp; Druck</div>
       ${kid ? '' : `<button class="menu-item" id="mIcs"><span class="mi">📆</span> Kalender-Export (.ics)</button>`}
@@ -2292,6 +2389,7 @@ function openMenu() {
   on('#mPrint', () => { closeSheet(); setTimeout(() => window.print(), 100); });
   on('#mIcs', () => { closeSheet(); exportIcs(); });
   on('#mHistory', () => openHistory());
+  on('#mLog', () => openChangeLog());
   on('#mFull', () => { closeSheet(); shareAll(); });
   on('#mLock', () => {
     editPast = !editPast;
@@ -2349,6 +2447,7 @@ function openHelp() {
       <li><b>Kind-Modus</b> → in den Einstellungen bei „Wer bist du?“ <b>Kind</b> wählen und eine PIN vergeben. Das Kind sieht den ganzen Kalender und bekommt Stände wie gewohnt per Link – schreiben kann es nur eigene Notizen. Aussehen, Namen und Farben darf es frei einstellen (gelten nur auf seinem Gerät); Übergaben, Rollenwechsel, PIN und Zurücksetzen liegen hinter den PIN-geschützten <b>Eltern-Einstellungen</b>, und den Kalender ändern können nur die Eltern.</li>
       <li><b>Vorschlag</b> → gewünschte Änderung pro Tag wählbar (auch gemischt, z. B. ein Wochenende hin, eins zurück); der andere sieht vorab, was sich ändert, und kann annehmen, ablehnen oder einen Gegenvorschlag schicken.</li>
       <li><b>Teilen-Knopf</b> → zeigt erst, was rausgeht (Nachricht dazu optional), dann als Link verschicken (z. B. per WhatsApp). Der andere tippt den Link an – fertig.</li>
+      <li><b>Letzte Änderungen</b> (Menü 🕓) zeigt, wann die aktuell gültigen Einträge entstanden sind – mit Datum, Uhrzeit und Urheber. So findet man z. B. einen versehentlichen Tipper. Und steht ein Tag bei dir anders als im empfangenen Link, weil dein Eintrag neuer ist, sagt es die Import-Vorschau jetzt („Bleibt bei dir anders“) – auf Wunsch mit einem Tipper angleichbar.</li>
       <li><b>Muster anwenden</b> (Menü) füllt einen Zeitraum mit eurem Rhythmus (wöchentlich, 14-täglich, 2-2-3, 2-2-5-5, 3-4-4-3 oder jedes 2. Wochenende) – einzelne Tage danach einfach umtippen. Der <b>↩-Knopf unten links</b> nimmt die letzte Aktion zurück, <b>↪</b> stellt sie wieder her (ausgegraut, wenn gerade nichts zurückzunehmen bzw. wiederherzustellen ist).</li>
       <li><b>Bilanz</b> (Menü) zählt Tage, Wochenendtage und ganze Wochenenden pro Seite für Monat und Jahr – als Text kopierbar.</li>
       <li><b>Ferien &amp; Feiertage</b> (Menü): Bundesland wählen (Feiertage rot unterstrichen, offline berechnet) und Ferien als Zeiträume eintragen (gepunktet unterstrichen). <b>Kalender-Export (.ics)</b> bringt den Plan lesend in Google-/Arbeitskalender, <b>Monat drucken</b> z. B. an den Kühlschrank.</li>
